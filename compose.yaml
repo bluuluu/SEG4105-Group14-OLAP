@@ -1,0 +1,69 @@
+name: seg4105-olap
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: olap
+      POSTGRES_USER: warehouse_owner
+      POSTGRES_PASSWORD: ${OLAP_OWNER_DB_PASSWORD:?Run ./scripts/configure-demo.sh first}
+    volumes:
+      - warehouse:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U warehouse_owner -d olap"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  bootstrap:
+    build: .
+    command:
+      - sh
+      - -ec
+      - |
+        if [ "$$OLAP_DEMO" = "true" ]; then
+          python -m olap init --demo --inbox /demo
+        else
+          python -m olap init
+        fi
+    environment:
+      DATABASE_URL: postgresql://warehouse_owner:${OLAP_OWNER_DB_PASSWORD}@db/olap
+      OLAP_WEB_DB_PASSWORD: ${OLAP_WEB_DB_PASSWORD:?Run ./scripts/configure-demo.sh first}
+      OLAP_ETL_DB_PASSWORD: ${OLAP_ETL_DB_PASSWORD:?Run ./scripts/configure-demo.sh first}
+      OLAP_BOOTSTRAP_ADMIN_PASSWORD: ${OLAP_BOOTSTRAP_ADMIN_PASSWORD:-}
+      OLAP_BOOTSTRAP_MANAGER_PASSWORD: ${OLAP_BOOTSTRAP_MANAGER_PASSWORD:-}
+      OLAP_DEMO: ${OLAP_DEMO:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+    tmpfs:
+      - /demo:uid=10001,gid=10001
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://olap_web:${OLAP_WEB_DB_PASSWORD}@db/olap
+      OLAP_DEMO: ${OLAP_DEMO:-false}
+      OLAP_COOKIE_SECURE: ${OLAP_COOKIE_SECURE:-false}
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${OLAP_PORT:-8014}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/healthz', timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+  worker:
+    build: .
+    command: ["python", "-m", "olap", "worker", "--inbox", "/incoming"]
+    environment:
+      ETL_DATABASE_URL: postgresql://olap_etl:${OLAP_ETL_DB_PASSWORD}@db/olap
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - ./data/inbox:/incoming:ro
+    restart: unless-stopped
+volumes:
+  warehouse:

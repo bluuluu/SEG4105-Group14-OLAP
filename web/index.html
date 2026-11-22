@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#151932">
+  <title>Retail Analytics · Group 14</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <section id="login" class="login-screen" hidden aria-labelledby="login-title">
+    <div class="login-card">
+      <div class="login-brand"><span class="brand-mark" data-icon="logo"></span> Retail Analytics</div>
+      <h1 id="login-title">Sign in</h1>
+      <p>Access your sales and inventory workspace.</p>
+      <form id="login-form">
+        <label>Username<input name="username" autocomplete="username" required maxlength="40"></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label>
+        <p class="form-message" role="alert"></p>
+        <button type="submit" class="button primary">Sign in</button>
+      </form>
+    </div>
+  </section>
+  <div id="workspace" class="workspace" hidden>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark" data-icon="logo"></span>
+        <div><strong>Retail Analytics</strong><small>GROUP 14 · SEG4105</small></div>
+      </div>
+      <nav aria-label="Workspace">
+        <span class="nav-label">ANALYTICS</span>
+        <button data-nav="sales"><span data-icon="overview"></span> Overview</button>
+        <button data-nav="inventory"><span data-icon="box"></span> Inventory</button>
+        <button data-nav="cube"><span data-icon="pivot"></span> OLAP explorer</button>
+        <span id="admin-label" class="nav-label" hidden>MANAGEMENT</span>
+        <button id="admin-nav" data-nav="admin" hidden><span data-icon="settings"></span> Administration</button>
+      </nav>
+      <div class="account">
+        <div id="avatar" class="avatar"></div>
+        <div class="account-name"><strong id="username"></strong><small id="role"></small></div>
+        <button id="sign-out" type="button" class="icon-button" title="Sign out" aria-label="Sign out" data-icon="logout"></button>
+      </div>
+    </aside>
+    <div class="main-area">
+      <header class="topbar">
+        <div class="breadcrumb"><span>Workspace</span><span data-icon="chevron-right"></span><strong id="breadcrumb"></strong></div>
+        <div id="data-status"></div>
+      </header>
+      <main>
+        <div class="page-head">
+          <div><h1 id="page-title"></h1><p id="page-description"></p></div>
+          <div id="page-actions"></div>
+        </div>
+        <div id="filters"></div>
+        <div id="view" aria-live="polite"></div>
+      </main>
+    </div>
+  </div>
+  <div id="startup" class="startup" role="status">Opening Retail Analytics…</div>
+</body>
+</html>
