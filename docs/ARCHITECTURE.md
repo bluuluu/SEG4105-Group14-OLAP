@@ -1,107 +1,107 @@
-# Development Methodology
+# Retail Analytics · SEG4105 Group 14
 
-This document defines the group's working rules for future changes and documentation updates. The project uses a hybrid predictive and iterative approach. The 12-week plan controls the main deliverables, while dashboard and query changes are developed in smaller increments with user feedback.
+A PostgreSQL warehouse and web application for analyzing retail sales and inventory. The dashboard, OLAP explorer, and batch worker follow the Group 14 proposal and design deliverables.
 
-## 1. Software Development Lifecycle
+## Documentation
 
-| Planned period | Work | Completion check |
-| --- | --- | --- |
-| Weeks 1-2 | Gather requirements, agree on KPIs, and identify data sources. | Business requirements and scope reviewed |
-| Weeks 3-4 | Design the schema, ETL mapping, interfaces, security, and dashboard layout. | Design agreed before dependent development |
-| Weeks 5-7 | Develop the warehouse and OLAP queries in parallel. Integrate at least weekly. | Warehouse and analytical results available |
-| Weeks 8-9 | Build dashboard increments and collect stakeholder feedback. | Core workflows available for testing |
-| Weeks 10-11 | Test data reconciliation, functionality, permissions, performance, and business acceptance. | Results recorded against acceptance criteria |
-| Week 12 | Prepare deployment, training, documentation, and handoff. | Release and handoff approved |
+- [Software Components](docs/COMPONENTS.md)
+- [System Architecture](docs/ARCHITECTURE.md)
+- [Development Methodology](docs/METHODOLOGY.md)
 
-Use GitHub Issues for tasks, bugs, and change requests. Each issue should identify an owner, expected outcome, and acceptance check. Use a GitHub Project board to organize planned, active, review, and completed work. These are the workflow rules to follow, rather than a record of previously completed issue or board activity.
+## Run the demo
 
-Review progress and integration risks weekly. Changes to scope, budget, or the approved schedule need a recorded decision by the project manager and business representative.
-
-## 2. Version Control and Branching Strategy
-
-Use GitHub Flow with short-lived branches from an updated `main`.
-
-- `main` is the integration and release branch. Merge changes after review and relevant verification.
-- `feature/*` contains a new capability, `fix/*` contains a correction, and `docs/*` contains documentation work.
-- For this documentation update, use `docs/architecture-and-methodology`.
-- Use descriptive commit prefixes such as `feat:`, `fix:`, `docs:`, `refactor:`, and `test:`. A message should explain the resulting change.
-- Open a pull request into `main`. Explain the change, link its issue, and record how it was checked. Use `Closes #<issue-number>` when the PR fully resolves an existing issue.
-- Have another group member review the diff. Resolve feedback before merging. Delete the merged feature/documentation branch and update the local `main`.
-
-Typical branch setup follows these commands.
+From the repository root, with Docker Compose and Python 3 available:
 
 ```sh
-git checkout main
-git pull --ff-only origin main
-git checkout -b docs/architecture-and-methodology
+./scripts/configure-demo.sh
+docker compose up -d --build --wait
+awk '/^OLAP_BOOTSTRAP_(ADMIN|MANAGER)_PASSWORD=/' .env
 ```
 
-After editing and checking the files, publish the documentation branch.
+Open [Retail Analytics](http://127.0.0.1:8014). The setup script stores generated passwords for `manager` and `admin` in the git-ignored `.env` alongside the database credentials. Demo data covers November 1, 2023 through November 1, 2026, with the last sales day on October 31, 2026 and a closing inventory snapshot on November 1.
+
+Run `docker compose stop` to stop the services and keep the warehouse. Run `docker compose up -d --wait` to resume. If you lose access to the admin account, create a second administrator with `docker compose run --rm bootstrap python -m olap user recovery-admin --role admin`, then reset the original account under **Administration**.
+
+### Run with local PostgreSQL
+
+Create a dedicated database owned by your local PostgreSQL account. The following uses the same local database connection for setup, ETL, and the web process. Compose uses separate runtime database roles.
 
 ```sh
-git add README.md docs/
-git commit -m "docs: add components architecture and methodology"
-git push -u origin docs/architecture-and-methodology
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+createdb olap
+export DATABASE_URL=postgresql:///olap
+export OLAP_DEMO=true
+python -m olap init --demo
+python -m uvicorn olap.app:app --host 127.0.0.1 --port 8014
 ```
 
-Open and review the PR on GitHub. After it is merged, synchronize locally.
+In a second terminal, run `python -m olap worker` with the same environment if you want to process new extracts automatically.
 
-```sh
-git checkout main
-git pull --ff-only origin main
-git branch -d docs/architecture-and-methodology
+## Dashboard walkthrough
+
+| Screen | Try this |
+| --- | --- |
+| **Overview** | Review net sales, units sold, closing stock, and reorder exceptions. Apply a date or region filter to slice the view. Select multiple regions and categories to dice it. Use the sales trend's monthly values or open a category to see its products. |
+| **Inventory** | Change the end date to inspect an earlier snapshot. The application uses the latest recorded inventory date in the selected range for every store and product in the selection. A position is below reorder when its on-hand quantity is strictly below its reorder point. |
+| **OLAP explorer** | Choose a measure and row dimension. For sales, drill from year to quarter, month, and day. Both datasets support region to store and category to product. Use **Roll up** to restore the prior scope. Add a column dimension to pivot, then **Swap axes** to transpose. Inventory pivots use one snapshot. |
+| **Administration** | Sign in as an admin to review load history, source counts, reconciliation, and rejected-row counts. Create accounts, change roles, disable access, or reset passwords. Managers can use all analytics screens. |
+
+Sales are in CAD, the calendar is Gregorian, and percentage changes compare with the immediately preceding period of the same length. Product and store dimensions use Type 1 updates. Reporting uses the latest names and classifications.
+
+## Daily extracts and reconciliation
+
+```mermaid
+flowchart LR
+    A[Sales and inventory CSV extracts] --> B[Validate and stage]
+    B --> C[Resolve dimension keys]
+    B --> Q[Quarantine rejected rows]
+    C --> W[PostgreSQL star schema]
+    W --> R[Reconcile loaded rows and totals]
+    R --> D[Dashboards and OLAP explorer]
+    Q --> O[Batch history]
+    R --> O
 ```
 
-## 3. Code Review and Definition of Done
+The fact grains are one sales transaction line and one inventory snapshot per date, store, and product. Both facts share the date, product, and store dimensions. See [schema.sql](sql/schema.sql) for constraints and indexes and [example_queries.sql](sql/example_queries.sql) for the adapted queries supplied with the design.
 
-A change is ready to merge when all applicable checks are complete.
+For real extracts, set `OLAP_DEMO=false` before initializing a fresh database. Place each batch under `data/inbox/<batch-id>/`. Use lexically sortable IDs such as `2026-11-21-001` so corrections and updates apply in order. Each batch needs these UTF-8 CSVs, with headers even for files with no rows.
 
-1. The changed code runs and its expected behavior is demonstrated.
-2. Relevant automated tests pass. Skipped database tests are reported as skipped.
-3. Data changes preserve fact grains, constraints, reconciliation, and repeatable batch loading.
-4. Authentication and account changes are checked with both manager and administrator roles, including denied requests.
-5. The README and affected documentation describe the delivered behavior and setup.
-6. The PR records the checks and any unresolved limitations. Another group member reviews and approves it.
-7. Credentials, generated `.env` values, local data, and unrelated generated files are excluded from the commit.
+| File | CSV columns |
+| --- | --- |
+| `products.csv` | `product_id,product_name,category` |
+| `stores.csv` | `store_id,store_name,region` |
+| `sales.csv` | `sales_line_key,date,store_id,product_id,quantity_sold,net_sales_amount` |
+| `inventory.csv` | `date,store_id,product_id,stock_on_hand,reorder_point` |
 
-For documentation changes, verify file paths, API names, Markdown links, command examples, and the rendered Mermaid diagram. Update the documentation when the implementation changes.
+Provide dates as `YYYY-MM-DD`, globally unique positive integer sales line keys, nonnegative quantities and stock, and nonnegative CAD net amounts with at most two decimal places. Either include dimension records or reference IDs already in the warehouse. Make the drop readable by the worker and create an empty `READY` file when all files are complete. If files may arrive concurrently, publish the completed directory with an atomic rename.
 
-## 4. Testing and Quality Assurance Strategy
+- The worker checks the inbox every 15 minutes. Supply both daily extracts from the source systems to meet the refresh target. The dashboard reports freshness for each feed and flags an overdue load after 24 hours.
+- Each load records extraction, acceptance, rejection, timing, and reconciliation. Invalid rows are quarantined in `etl_reject` with their source file, line, and reason. The accepted rows and audit results commit together after reconciliation. The stock reconciliation total sums source rows solely to check loading accuracy.
+- The worker skips completed batch IDs, retries transient errors, and pauses later loads behind a failed batch. Fix a failed batch in place. For a completed load with rejected rows or data corrections, submit those rows with a new batch ID. Fact keys make reprocessing an idempotent upsert.
+- Compose gives the ETL worker a read-only source mount and its own warehouse write role. The application uses a separate database role with read access to warehouse facts and write access to accounts and sessions. When serving through an HTTPS reverse proxy, set `OLAP_COOKIE_SECURE=true`.
 
-### Automated tests
+For an immediate run, use `docker compose exec worker python -m olap worker --inbox /incoming --once`. For a local PostgreSQL setup, use `python -m olap load path/to/batch`.
 
-Use Pytest for automated verification. The current suite in [`tests/test_warehouse.py`](../tests/test_warehouse.py) contains four PostgreSQL/API integration tests covering the following areas.
+## Verification and project acceptance
 
-- Sales totals, slice/dice filters, roll-up, pivot, and transpose results.
-- Inventory snapshot selection and strict reorder thresholds.
-- Account roles and session revocation.
-- Repeated batch loading, rejected rows, and recovery after failure.
-
-Install test dependencies in the development environment. Supply a PostgreSQL connection to a dedicated test database whose account can create and remove temporary schemas.
+Run the PostgreSQL integration tests with an account that can create a temporary schema. They cover known sales and inventory totals, pivot and transpose, filter intersections, replay, quarantine, failure recovery, and API role controls.
 
 ```sh
-python -m pip install -r requirements.txt pytest httpx
-OLAP_TEST_DATABASE_URL=postgresql:///olap_test python -m pytest -q
-```
-
-The database must exist and be accessible before running this command. The fixture creates an isolated schema and removes it afterward. Without `OLAP_TEST_DATABASE_URL`, the tests skip. The inline environment-variable syntax above is for a POSIX shell. In Windows CMD, set the variable on its own line before running Pytest.
-
-For new validation or calculation helpers, add focused unit tests in Pytest. The existing suite has no separately measured unit-test coverage percentage. A proposed target is at least 80% statement coverage of new or changed ETL/analytics logic, with invalid-input and recovery cases included. This target is a future quality goal, not a reported result.
-
-### System and performance checks
-
-Start the application using the [README instructions](../README.md#run-the-demo). Check sign-in, date/dimension filters, drill-down, roll-up, pivot, inventory snapshots, and administration through the browser.
-
-Run the existing benchmark against the running application.
-
-```sh
+pip install pytest httpx
+OLAP_TEST_DATABASE_URL=postgresql:///olap python -m pytest -q
 python scripts/benchmark.py --users 100
 ```
 
-It prompts for the dashboard password and sends concurrent requests using independently authenticated sessions to the sales, inventory, and cube endpoints. Its pass condition is no failed requests and a maximum response time of five seconds or less for each endpoint. Save the request counts, p95, maximum, dataset, hardware, and date with the test results.
+The benchmark prompts for the dashboard password and measures each standard analytics endpoint with 100 independently authenticated sessions on the seeded dataset. It exits unsuccessfully if a request fails or exceeds five seconds.
 
-Verify daily extract delivery and worker history in the deployed environment. Measure availability over an agreed monitoring window. Have the business representative validate the KPIs and record UAT approval. Mark a criterion as passed only when the corresponding execution evidence or approval is available.
+| Design criterion | How to verify |
+| --- | --- |
+| SC-01 / SC-02 · Five seconds and 100 concurrent users | Run the benchmark on the target hardware and approved dataset. |
+| SC-03 · Daily refresh | Deliver both daily source extracts and review timestamps and batch history in the deployed environment. |
+| SC-04 · 99.5% availability | Measure `/healthz` and an authenticated dashboard journey over the agreed monitoring window. |
+| SC-05 · Three years of history | The demo covers three years. Verify real source coverage before acceptance. |
+| SC-06 · Reconciliation and UAT | The ETL checks accepted rows against the warehouse. Have the business representative validate the KPIs and sign off on the dashboard workflows. |
 
-### Static review
-
-Review SQL parameters, allowed dimension mappings, constraints, account permissions, configuration, and changed dependencies. Inspect diffs for secrets and unrelated files before pushing. Record the actual review or scanner used and its findings. The repository currently has no committed lint, coverage, or CI configuration, so these checks must be run and recorded by the team until automation is added.
+The supplied [Monte Carlo model](scripts/OLAP_Schedule_Monte_Carlo.py) remains a project schedule deliverable. Run it with `pip install numpy matplotlib` and `python scripts/OLAP_Schedule_Monte_Carlo.py`. Its seeded 200,000 trials reproduce the design's 13.19-week mean and 14.15-week P80.
