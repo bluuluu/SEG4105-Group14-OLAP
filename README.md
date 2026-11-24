@@ -2,6 +2,14 @@
 
 A PostgreSQL warehouse and web application for analyzing retail sales and inventory. The dashboard, OLAP explorer, and batch worker follow the Group 14 proposal and design deliverables.
 
+## Project at a glance
+
+- **Overview and inventory** show sales totals, stock on hand, and reorder exceptions by date, store, or product.
+- **OLAP explorer** supports drill-down, roll-up, and pivots across the warehouse dimensions.
+- **Administration** shows batch reconciliation and account settings for authorized users.
+
+The demo runs on synthetic data. Start with [Run the demo](#run-the-demo), then follow the [dashboard walkthrough](#dashboard-walkthrough) to verify those workflows.
+
 ## Documentation
 
 - [Software Components](docs/COMPONENTS.md)
