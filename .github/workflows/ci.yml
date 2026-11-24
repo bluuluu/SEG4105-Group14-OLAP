@@ -11,6 +11,10 @@ on:
         description: Optional public Docker Hub image to pull and run
         required: false
         type: string
+      export_image:
+        description: Save the locally built and tested image for registry publication
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -82,6 +86,16 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:8014/healthz | tee /tmp/olap-health.json
           python -c 'import json; assert json.load(open("/tmp/olap-health.json")) == {"status": "ready"}'
           curl --fail --silent --show-error http://127.0.0.1:8014/ --output /dev/null
+      - name: Export the tested image
+        if: ${{ inputs.export_image && env.REQUESTED_IMAGE == '' }}
+        run: docker save --output "$RUNNER_TEMP/olap-image.tar" "$OLAP_IMAGE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: ${{ inputs.export_image && env.REQUESTED_IMAGE == '' }}
+        with:
+          name: olap-image
+          path: ${{ runner.temp }}/olap-image.tar
+          retention-days: 1
+          if-no-files-found: error
       - name: Stop the test stack
         if: ${{ always() && env.OLAP_IMAGE != '' }}
         run: docker compose -f compose.yaml -f compose.image.yaml down --volumes
