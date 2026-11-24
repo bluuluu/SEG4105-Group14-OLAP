@@ -1,0 +1,11 @@
+# Use with compose.yaml to run a single tagged image for all Python services.
+services:
+  bootstrap:
+    build: !reset null
+    image: ${OLAP_IMAGE:?Set OLAP_IMAGE to the application image tag}
+  app:
+    build: !reset null
+    image: ${OLAP_IMAGE:?Set OLAP_IMAGE to the application image tag}
+  worker:
+    build: !reset null
+    image: ${OLAP_IMAGE:?Set OLAP_IMAGE to the application image tag}

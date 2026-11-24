@@ -1,7 +1,12 @@
 .git
+.gitignore
+.DS_Store
+README.md
+docs/
 .env
 .venv
 data
 __pycache__
 .pytest_cache
 **/__pycache__
+*.log
