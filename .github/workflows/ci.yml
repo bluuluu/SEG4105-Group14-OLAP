@@ -1,0 +1,87 @@
+name: OLAP verification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Optional public Docker Hub image to pull and run
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: PostgreSQL integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: olap_test
+          POSTGRES_PASSWORD: ci-postgres
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U postgres -d olap_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Install application and test dependencies
+        run: python -m pip install -r requirements.txt pytest httpx
+      - name: Run the integration tests
+        env:
+          OLAP_TEST_DATABASE_URL: postgresql://postgres:ci-postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/olap_test
+        run: python -m pytest -q
+
+  docker:
+    name: Docker Compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REQUESTED_IMAGE: ${{ inputs.image }}
+      COMPOSE_PROJECT_NAME: olap-ci
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build or pull the image and start the demo
+        shell: bash
+        run: |
+          if [[ -n "$REQUESTED_IMAGE" ]]; then
+            if [[ ! "$REQUESTED_IMAGE" =~ ^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9._-]*:[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]]; then
+              echo 'Use a Docker Hub namespace/repository:tag.' >&2
+              exit 1
+            fi
+            export OLAP_IMAGE="$REQUESTED_IMAGE"
+            echo "OLAP_IMAGE=$OLAP_IMAGE" >> "$GITHUB_ENV"
+            docker pull "$OLAP_IMAGE"
+          else
+            export OLAP_IMAGE=olap-ci:${GITHUB_SHA}
+            echo "OLAP_IMAGE=$OLAP_IMAGE" >> "$GITHUB_ENV"
+            docker build --tag "$OLAP_IMAGE" .
+          fi
+          sh scripts/configure-demo.sh
+          docker compose -f compose.yaml -f compose.image.yaml up -d --no-build --wait --wait-timeout 180
+          docker compose -f compose.yaml -f compose.image.yaml ps --all
+      - name: Verify the HTTP health and dashboard routes
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8014/healthz | tee /tmp/olap-health.json
+          python -c 'import json; assert json.load(open("/tmp/olap-health.json")) == {"status": "ready"}'
+          curl --fail --silent --show-error http://127.0.0.1:8014/ --output /dev/null
+      - name: Stop the test stack
+        if: ${{ always() && env.OLAP_IMAGE != '' }}
+        run: docker compose -f compose.yaml -f compose.image.yaml down --volumes
