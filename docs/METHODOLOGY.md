@@ -105,4 +105,3 @@ Verify daily extract delivery and worker history in the deployed environment. Me
 ### Static review
 
 Review SQL parameters, allowed dimension mappings, constraints, account permissions, configuration, and changed dependencies. Inspect diffs for secrets and unrelated files before pushing. Record the actual review or scanner used and its findings. The repository currently has no committed lint, coverage, or CI configuration, so these checks must be run and recorded by the team until automation is added.
-  
