@@ -2,6 +2,12 @@
 
 A PostgreSQL warehouse and web application for analyzing retail sales and inventory. The dashboard, OLAP explorer, and batch worker follow the Group 14 proposal and design deliverables.
 
+## Documentation
+
+- [Software Components](docs/COMPONENTS.md)
+- [System Architecture](docs/ARCHITECTURE.md)
+- [Development Methodology](docs/METHODOLOGY.md)
+
 ## Run the demo
 
 From the repository root, with Docker Compose and Python 3 available:
