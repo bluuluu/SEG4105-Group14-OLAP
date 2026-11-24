@@ -30,6 +30,21 @@ Open [Retail Analytics](http://127.0.0.1:8014). The setup script stores generate
 
 Run `docker compose stop` to stop the services and keep the warehouse. Run `docker compose up -d --wait` to resume. If you lose access to the admin account, create a second administrator with `docker compose run --rm bootstrap python -m olap user recovery-admin --role admin`, then reset the original account under **Administration**.
 
+### Verify a Docker Hub image
+
+Use a fresh checkout on a machine with Docker Compose and Python 3. Replace `YOUR_NAMESPACE/seg4105-group14-olap` with the published image name. On a machine with the demo already running on port 8014, use another port such as `OLAP_PORT=8015` and update the health-check URL accordingly.
+
+```sh
+./scripts/configure-demo.sh
+export OLAP_IMAGE=YOUR_NAMESPACE/seg4105-group14-olap:latest
+docker compose -p olap-pull-check -f compose.yaml -f compose.image.yaml pull
+docker compose -p olap-pull-check -f compose.yaml -f compose.image.yaml up -d --no-build --wait
+curl --fail --show-error http://127.0.0.1:8014/healthz
+docker compose -p olap-pull-check -f compose.yaml -f compose.image.yaml down
+```
+
+The override uses the same image for `bootstrap`, `app`, and `worker`. PostgreSQL still comes from `postgres:16`. A successful health check returns `{"status":"ready"}`. Sign in as `manager` and open the dashboard to verify the seeded data. For Lab 8, retain the Docker Hub tag listing and the successful pull and run output. Never include the generated `.env` credentials in screenshots.
+
 ### Run with local PostgreSQL
 
 Create a dedicated database owned by your local PostgreSQL account. The following uses the same local database connection for setup, ETL, and the web process. Compose uses separate runtime database roles.

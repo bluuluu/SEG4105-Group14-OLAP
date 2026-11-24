@@ -9,5 +9,6 @@ COPY sql ./sql
 COPY web ./web
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 USER olap
+EXPOSE 8000
 
 CMD ["python", "-m", "uvicorn", "olap.app:app", "--host", "0.0.0.0", "--port", "8000"]
