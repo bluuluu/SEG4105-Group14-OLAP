@@ -32,11 +32,11 @@ Run `docker compose stop` to stop the services and keep the warehouse. Run `dock
 
 ### Verify a Docker Hub image
 
-Use a fresh checkout on a machine with Docker Compose and Python 3. Replace `YOUR_NAMESPACE/seg4105-group14-olap` with the published image name. On a machine with the demo already running on port 8014, use another port such as `OLAP_PORT=8015` and update the health-check URL accordingly.
+The [published Docker Hub image](https://hub.docker.com/r/uoretr0/seg4105-group14-olap/tags) is available as `1.0` and `latest`. Use a fresh checkout with Docker Compose and Python 3. If port 8014 is in use, run `export OLAP_PORT=8015` and update the health-check URL.
 
 ```sh
 ./scripts/configure-demo.sh
-export OLAP_IMAGE=YOUR_NAMESPACE/seg4105-group14-olap:latest
+export OLAP_IMAGE=uoretr0/seg4105-group14-olap:latest
 docker compose -p olap-pull-check -f compose.yaml -f compose.image.yaml pull
 docker compose -p olap-pull-check -f compose.yaml -f compose.image.yaml up -d --no-build --wait
 curl --fail --show-error http://127.0.0.1:8014/healthz
