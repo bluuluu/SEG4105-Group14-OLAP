@@ -2,6 +2,12 @@
 
 A PostgreSQL warehouse and web application for analyzing retail sales and inventory. The dashboard, OLAP explorer, and batch worker follow the Group 14 proposal and design deliverables.
 
+## Documentation
+
+- [Software Components](docs/COMPONENTS.md)
+- [System Architecture](docs/ARCHITECTURE.md)
+- [Development Methodology](docs/METHODOLOGY.md)
+
 ## Run the demo
 
 From the repository root, with Docker Compose and Python 3 available:
@@ -99,3 +105,4 @@ The benchmark prompts for the dashboard password and measures each standard anal
 | SC-06 · Reconciliation and UAT | The ETL checks accepted rows against the warehouse. Have the business representative validate the KPIs and sign off on the dashboard workflows. |
 
 The supplied [Monte Carlo model](scripts/OLAP_Schedule_Monte_Carlo.py) remains a project schedule deliverable. Run it with `pip install numpy matplotlib` and `python scripts/OLAP_Schedule_Monte_Carlo.py`. Its seeded 200,000 trials reproduce the design's 13.19-week mean and 14.15-week P80.
+    
