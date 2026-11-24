@@ -82,4 +82,3 @@ Stock on hand is a balance at a particular time. Queries select one snapshot to 
 ### ADR-05 Use database-backed sessions and separate runtime roles
 
 The implementation uses salted scrypt password hashes, hashed session tokens, role checks, and separate web/ETL database grants. These support account revocation and limit routine database access. Deployment still needs controlled credentials and HTTPS configuration.
-  
