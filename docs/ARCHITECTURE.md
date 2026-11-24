@@ -1,84 +1,107 @@
-# System Architecture
+# Development Methodology
 
-The platform uses a layered application and a separate batch worker. PostgreSQL stores the analytical warehouse, application accounts, sessions, and ETL audit records.
+This document defines the group's working rules for future changes and documentation updates. The project uses a hybrid predictive and iterative approach. The 12-week plan controls the main deliverables, while dashboard and query changes are developed in smaller increments with user feedback.
 
-## 1. Architectural Style
+## 1. Software Development Lifecycle
 
-The web application is a modular monolith. FastAPI serves the browser assets and HTTP endpoints from one application. Authentication, analytical queries, and database access are separate Python modules. The ETL worker runs as a separate process using the same Python codebase.
+| Planned period | Work | Completion check |
+| --- | --- | --- |
+| Weeks 1-2 | Gather requirements, agree on KPIs, and identify data sources. | Business requirements and scope reviewed |
+| Weeks 3-4 | Design the schema, ETL mapping, interfaces, security, and dashboard layout. | Design agreed before dependent development |
+| Weeks 5-7 | Develop the warehouse and OLAP queries in parallel. Integrate at least weekly. | Warehouse and analytical results available |
+| Weeks 8-9 | Build dashboard increments and collect stakeholder feedback. | Core workflows available for testing |
+| Weeks 10-11 | Test data reconciliation, functionality, permissions, performance, and business acceptance. | Results recorded against acceptance criteria |
+| Week 12 | Prepare deployment, training, documentation, and handoff. | Release and handoff approved |
 
-This structure keeps a small student project manageable. The worker can process extracts without making a browser request wait for a batch load. SQL performs the aggregations close to the warehouse data. PostgreSQL remains a shared dependency for both processing and reporting.
+Use GitHub Issues for tasks, bugs, and change requests. Each issue should identify an owner, expected outcome, and acceptance check. Use a GitHub Project board to organize planned, active, review, and completed work. These are the workflow rules to follow, rather than a record of previously completed issue or board activity.
 
-## 2. Component Interaction Diagram
+Review progress and integration risks weekly. Changes to scope, budget, or the approved schedule need a recorded decision by the project manager and business representative.
 
-```mermaid
-flowchart TD
-    Browser[Browser dashboard] --> App[FastAPI application]
-    App --> Auth[Authentication and sessions]
-    App --> Queries[OLAP queries]
-    Auth --> DB[(PostgreSQL warehouse)]
-    Queries --> DB
-    Extracts[CSV extracts and READY marker] --> Worker[Batch worker]
-    Worker --> ETL[Validate and load]
-    ETL --> DB
+## 2. Version Control and Branching Strategy
+
+Use GitHub Flow with short-lived branches from an updated `main`.
+
+- `main` is the integration and release branch. Merge changes after review and relevant verification.
+- `feature/*` contains a new capability, `fix/*` contains a correction, and `docs/*` contains documentation work.
+- For this documentation update, use `docs/architecture-and-methodology`.
+- Use descriptive commit prefixes such as `feat:`, `fix:`, `docs:`, `refactor:`, and `test:`. A message should explain the resulting change.
+- Open a pull request into `main`. Explain the change, link its issue, and record how it was checked. Use `Closes #<issue-number>` when the PR fully resolves an existing issue.
+- Have another group member review the diff. Resolve feedback before merging. Delete the merged feature/documentation branch and update the local `main`.
+
+Typical branch setup follows these commands.
+
+```sh
+git checkout main
+git pull --ff-only origin main
+git checkout -b docs/architecture-and-methodology
 ```
 
-In Docker Compose, four services support this design.
+After editing and checking the files, publish the documentation branch.
 
-| Service | Role | Startup dependency |
-| --- | --- | --- |
-| `db` | Run PostgreSQL 16 and persist data in the `warehouse` volume. | Database health check |
-| `bootstrap` | Initialize the schema, runtime database roles, and initial accounts. Load synthetic extracts when demo mode is enabled. | Healthy `db` |
-| `app` | Serve the UI and API on container port 8000, mapped to host port 8014 by default. | Successful `bootstrap` |
-| `worker` | Poll the read-only incoming extract mount and load completed batches. | Successful `bootstrap` |
+```sh
+git add README.md docs/
+git commit -m "docs: add components architecture and methodology"
+git push -u origin docs/architecture-and-methodology
+```
 
-The service configuration is in [`compose.yaml`](../compose.yaml). The [README](../README.md#run-the-demo) gives the startup commands.
+Open and review the PR on GitHub. After it is merged, synchronize locally.
 
-## 3. Data Flow and Execution Lifecycle
+```sh
+git checkout main
+git pull --ff-only origin main
+git branch -d docs/architecture-and-methodology
+```
 
-### Batch ingestion
+## 3. Code Review and Definition of Done
 
-1. The source systems supply four CSV extracts in a batch directory. The producer adds `READY` only after the files are complete. Sortable batch IDs establish processing order.
-2. The worker checks the inbox every 900 seconds by default. It skips completed batch IDs and pauses later batches behind a failed batch.
-3. The ETL loader validates required fields, types, quantities, amounts, and identifiers. It records rejected rows and resolves accepted records to warehouse dimension keys.
-4. Dimensions are loaded before facts. Upserts and fact constraints support repeatable loading. A database advisory lock serializes batch loads.
-5. The loader reconciles accepted records against warehouse counts and amounts before the data transaction commits. A failure rolls back that transaction and records a failed run. Transient database failures are retried up to three attempts.
-6. Administrators inspect recent run results through the application. Freshness information identifies feeds whose latest fact date is more than 24 hours old. Meeting the daily refresh target also requires timely delivery of source extracts.
+A change is ready to merge when all applicable checks are complete.
 
-### Reporting requests
+1. The changed code runs and its expected behavior is demonstrated.
+2. Relevant automated tests pass. Skipped database tests are reported as skipped.
+3. Data changes preserve fact grains, constraints, reconciliation, and repeatable batch loading.
+4. Authentication and account changes are checked with both manager and administrator roles, including denied requests.
+5. The README and affected documentation describe the delivered behavior and setup.
+6. The PR records the checks and any unresolved limitations. Another group member reviews and approves it.
+7. Credentials, generated `.env` values, local data, and unrelated generated files are excluded from the commit.
 
-1. A manager or administrator signs in. The server verifies the password and sets an HttpOnly, SameSite Strict session cookie. PostgreSQL stores the token's hash and expiry.
-2. The browser sends date and dimension filters to the API. The server validates the account, role, dates, dimensions, and measure.
-3. The analytics module builds queries from fixed dimension/measure mappings and passes filter values as SQL parameters.
-4. Sales queries aggregate transaction lines. Inventory queries first choose the latest snapshot date in the selected range, then apply store and product filters to that snapshot. Inventory balances are not summed across dates.
-5. Read-only transactions return a consistent query result. The API sends JSON to the dashboard, which updates its KPIs, charts, and pivot tables.
+For documentation changes, verify file paths, API names, Markdown links, command examples, and the rendered Mermaid diagram. Update the documentation when the implementation changes.
 
-### Storage and access
+## 4. Testing and Quality Assurance Strategy
 
-- `fact_sales` has one row per sales transaction line. `fact_inventory_snapshot` has one row per date, store, and product.
-- `dim_date`, `dim_product`, and `dim_store` are shared dimensions. Product and store updates use the latest supplied attributes.
-- The Compose web database role can read warehouse data and manage application accounts/sessions. The ETL role can write warehouse and audit records. Initialization uses the owner role.
-- The app and worker use the same database service. The persistent volume preserves data when services stop. Production HTTPS deployments must enable secure cookies with `OLAP_COOKIE_SECURE=true`.
+### Automated tests
 
-## 4. Architecture Decision Records
+Use Pytest for automated verification. The current suite in [`tests/test_warehouse.py`](../tests/test_warehouse.py) contains four PostgreSQL/API integration tests covering the following areas.
 
-These records explain decisions represented by the current implementation.
+- Sales totals, slice/dice filters, roll-up, pivot, and transpose results.
+- Inventory snapshot selection and strict reorder thresholds.
+- Account roles and session revocation.
+- Repeated batch loading, rejected rows, and recovery after failure.
 
-### ADR-01 Use a PostgreSQL star schema
+Install test dependencies in the development environment. Supply a PostgreSQL connection to a dedicated test database whose account can create and remove temporary schemas.
 
-Retail reporting needs sales and stock measures grouped by date, product, and store. Shared dimensions and two fact tables support those queries and database-level integrity checks. Aggregation performance depends on indexes, query design, and the deployed dataset.
+```sh
+python -m pip install -r requirements.txt pytest httpx
+OLAP_TEST_DATABASE_URL=postgresql:///olap_test python -m pytest -q
+```
 
-### ADR-02 Use batch ETL with validation before loading
+The database must exist and be accessible before running this command. The fixture creates an isolated schema and removes it afterward. Without `OLAP_TEST_DATABASE_URL`, the tests skip. The inline environment-variable syntax above is for a POSIX shell. In Windows CMD, set the variable on its own line before running Pytest.
 
-The scope requires daily refreshes. CSV batches with a completion marker, validation, quarantine, and reconciliation provide a traceable loading process. Reports depend on the latest delivered batch, and invalid records need follow-up.
+For new validation or calculation helpers, add focused unit tests in Pytest. The existing suite has no separately measured unit-test coverage percentage. A proposed target is at least 80% statement coverage of new or changed ETL/analytics logic, with invalid-input and recovery cases included. This target is a future quality goal, not a reported result.
 
-### ADR-03 Keep the web application together and run ETL separately
+### System and performance checks
 
-One FastAPI application serves both the static frontend and API, while a separate worker processes batches. This reduces deployment complexity and separates their process lifecycles. Both still depend on the shared PostgreSQL service and codebase.
+Start the application using the [README instructions](../README.md#run-the-demo). Check sign-in, date/dimension filters, drill-down, roll-up, pivot, inventory snapshots, and administration through the browser.
 
-### ADR-04 Report inventory from one snapshot
+Run the existing benchmark against the running application.
 
-Stock on hand is a balance at a particular time. Queries select one snapshot to avoid counting the same stock across several dates. Inventory pivots therefore use product/store dimensions, while time-axis inventory pivots are rejected.
+```sh
+python scripts/benchmark.py --users 100
+```
 
-### ADR-05 Use database-backed sessions and separate runtime roles
+It prompts for the dashboard password and sends concurrent requests using independently authenticated sessions to the sales, inventory, and cube endpoints. Its pass condition is no failed requests and a maximum response time of five seconds or less for each endpoint. Save the request counts, p95, maximum, dataset, hardware, and date with the test results.
 
-The implementation uses salted scrypt password hashes, hashed session tokens, role checks, and separate web/ETL database grants. These support account revocation and limit routine database access. Deployment still needs controlled credentials and HTTPS configuration.
+Verify daily extract delivery and worker history in the deployed environment. Measure availability over an agreed monitoring window. Have the business representative validate the KPIs and record UAT approval. Mark a criterion as passed only when the corresponding execution evidence or approval is available.
+
+### Static review
+
+Review SQL parameters, allowed dimension mappings, constraints, account permissions, configuration, and changed dependencies. Inspect diffs for secrets and unrelated files before pushing. Record the actual review or scanner used and its findings. The repository currently has no committed lint, coverage, or CI configuration, so these checks must be run and recorded by the team until automation is added.
